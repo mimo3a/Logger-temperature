@@ -17,10 +17,11 @@
   */
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
-#include "main.h"
+
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
+#include "main.h"
 #include <stdio.h>
 #include <string.h>
 
@@ -168,30 +169,7 @@ uint8_t OneWire_ReadByte(void) {
     return value;
 }
 
-void UART_Init(void) {
-    huart2.Instance = USART2; // Use USART2
-    huart2.Init.BaudRate = 9600; // Set baud rate
-    huart2.Init.WordLength = UART_WORDLENGTH_8B;
-    huart2.Init.StopBits = UART_STOPBITS_1;
-    huart2.Init.Parity = UART_PARITY_NONE;
-    huart2.Init.Mode = UART_MODE_TX_RX;
-    huart2.Init.HwFlowCtl = UART_HWCONTROL_NONE;
-    huart2.Init.OverSampling = UART_OVERSAMPLING_16;
 
-    if (HAL_UART_Init(&huart2) != HAL_OK) {
-        // Initialization Error
-        Error_Handler();
-    }
-}
-
-void UART_SendString(const char *str) {
-    HAL_UART_Transmit(&huart2, (uint8_t *)str, strlen(str), HAL_MAX_DELAY);
-}
-
-void UART_ReceiveString(void) {
-    HAL_UART_Receive(&huart2, (uint8_t *)uart_rx_buffer, sizeof(uart_rx_buffer) - 1, HAL_MAX_DELAY);
-    uart_rx_buffer[sizeof(uart_rx_buffer) - 1] = '\0'; // Null-terminate the string
-}
 /* USER CODE END 0 */
 
 /**
@@ -207,12 +185,11 @@ int main(void) {
     DWT_Init();
     MX_USART2_UART_Init();
 
-    UART_SendString("UART Initialized!\r\n");
+    UART_SEND_TXT(&huart2, "UART Initialized!\r\n", 1);
 
     while (1) {
 
-    	UART_SEND_TXT (&huart2, "Temperature = ", 0);
-    	HAL_Delay(1000);
+    	/* USER CODE BEGIN 3 */
 
 
         char buffer[64];
@@ -233,11 +210,14 @@ int main(void) {
         int16_t rawTemp = (temp_h << 8) | temp_l;
         float temperature = (float)rawTemp / 16.0f;
 
+        UART_SEND_TXT(&huart2, "Hallo", 1);
+
         sprintf(buffer, "Temperature: %.2f °C\r\n", temperature);
         HAL_UART_Transmit(&huart2, (uint8_t*)buffer, strlen(buffer), HAL_MAX_DELAY);
 
         HAL_Delay(1000);
     }
+    /* USER CODE END 3 */
 }
 
 /**
