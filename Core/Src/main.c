@@ -41,13 +41,15 @@
 
 /* Private macro -------------------------------------------------------------*/
 /* USER CODE BEGIN PM */
-
+uint8_t measure_flag = 0;
 /* USER CODE END PM */
 
 /* Private variables ---------------------------------------------------------*/
 I2C_HandleTypeDef hi2c1;
 
 UART_HandleTypeDef huart2;
+
+
 
 /* USER CODE BEGIN PV */
 char uart_rx_buffer[100]; // Buffer for received data
@@ -173,6 +175,14 @@ uint8_t OneWire_ReadByte(void) {
     return value;
 }
 
+void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
+{
+    if (GPIO_Pin == GPIO_PIN_13)
+    {
+        measure_flag = 1;  // Сигнализируем, что кнопку нажали
+    }
+}
+
 
 /* USER CODE END 0 */
 
@@ -180,6 +190,44 @@ uint8_t OneWire_ReadByte(void) {
   * @brief  The application entry point.
   * @retval int
   */
+
+void MeasureAndDisplay(){
+	char buffer[64];
+
+	        OneWire_Reset();
+	        OneWire_WriteByte(0xCC); // Skip ROM
+	        OneWire_WriteByte(0x44); // Convert T
+
+	        HAL_Delay(750); // ждать преобразование
+
+	        OneWire_Reset();
+	        OneWire_WriteByte(0xCC); // Skip ROM
+	        OneWire_WriteByte(0xBE); // Read Scratchpad
+
+	        uint8_t temp_l = OneWire_ReadByte();
+	        uint8_t temp_h = OneWire_ReadByte();
+
+	        int16_t rawTemp = (temp_h << 8) | temp_l;
+	        float temperature = (float)rawTemp / 16.0f;
+
+	        UART_SEND_TXT(&huart2, "Hallo", 1);
+
+	        sprintf(buffer, "Temperature: %.2f °C\r\n", temperature);
+	        HAL_UART_Transmit(&huart2, (uint8_t*)buffer, strlen(buffer), HAL_MAX_DELAY);
+
+	        /* LCD output */
+
+	        HD44780_Display();
+	        HD44780_Backlight();
+	        sprintf(buffer, "T = %.2f C   ", temperature);
+	        HD44780_SetCursor(0, 1);
+	        HD44780_PrintStr(buffer);
+
+	        HAL_Delay(5000);
+	        HD44780_NoDisplay();
+	        HD44780_NoBacklight();
+}
+
 int main(void)
 {
 
@@ -212,7 +260,11 @@ int main(void)
   	HD44780_Init(2);
   	HD44780_Clear();
   	HD44780_SetCursor(0, 0);
-  	HD44780_PrintStr("STM32 Temp Meter");
+  	HD44780_PrintStr("Temperature:");
+  	HD44780_NoDisplay();
+    HD44780_NoBacklight();
+
+
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -222,37 +274,23 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
+	  if (measure_flag)
+	      {
+	          measure_flag = 0;
+	          /* Initialize LCD (2 lines) */
+//	          HD44780_Init(2);
+//	          HD44780_Clear();
+//	          HD44780_SetCursor(0, 0);
+//	          HD44780_PrintStr("Temperature:");
+	          MeasureAndDisplay();
+//	          HAL_Delay(5000);
+	      }
+	  // сон
+	   HAL_SuspendTick();
+	   HAL_PWR_EnterSTOPMode(PWR_LOWPOWERREGULATOR_ON, PWR_STOPENTRY_WFI);
+	   HAL_ResumeTick();
+	   SystemClock_Config(); // восстановление после пробуждения
 
-
-        char buffer[64];
-
-        OneWire_Reset();
-        OneWire_WriteByte(0xCC); // Skip ROM
-        OneWire_WriteByte(0x44); // Convert T
-
-        HAL_Delay(750); // ждать преобразование
-
-        OneWire_Reset();
-        OneWire_WriteByte(0xCC); // Skip ROM
-        OneWire_WriteByte(0xBE); // Read Scratchpad
-
-        uint8_t temp_l = OneWire_ReadByte();
-        uint8_t temp_h = OneWire_ReadByte();
-
-        int16_t rawTemp = (temp_h << 8) | temp_l;
-        float temperature = (float)rawTemp / 16.0f;
-
-        UART_SEND_TXT(&huart2, "Hallo", 1);
-
-        sprintf(buffer, "Temperature: %.2f °C\r\n", temperature);
-        HAL_UART_Transmit(&huart2, (uint8_t*)buffer, strlen(buffer), HAL_MAX_DELAY);
-
-        /* LCD output */
-        sprintf(buffer, "T = %.2f C   ", temperature);
-        HD44780_SetCursor(0, 1);
-        HD44780_PrintStr(buffer);
-
-        HAL_Delay(1000);
     }
   /* USER CODE END 3 */
 }
@@ -402,11 +440,18 @@ static void MX_GPIO_Init(void)
   /* USER CODE END MX_GPIO_Init_1 */
 
   /* GPIO Ports Clock Enable */
+  __HAL_RCC_GPIOC_CLK_ENABLE();
   __HAL_RCC_GPIOA_CLK_ENABLE();
   __HAL_RCC_GPIOB_CLK_ENABLE();
 
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(GPIOB, GPIO_PIN_1, GPIO_PIN_RESET);
+
+  /*Configure GPIO pin : PC13 */
+  GPIO_InitStruct.Pin = GPIO_PIN_13;
+  GPIO_InitStruct.Mode = GPIO_MODE_IT_RISING;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
 
   /*Configure GPIO pin : PB1 */
   GPIO_InitStruct.Pin = GPIO_PIN_1;
@@ -414,6 +459,10 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
+
+  /* EXTI interrupt init*/
+  HAL_NVIC_SetPriority(EXTI15_10_IRQn, 1, 0);
+  HAL_NVIC_EnableIRQ(EXTI15_10_IRQn);
 
   /* USER CODE BEGIN MX_GPIO_Init_2 */
 
